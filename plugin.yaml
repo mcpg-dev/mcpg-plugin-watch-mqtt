@@ -1,0 +1,41 @@
+schema: mcpg.dev/plugin/v1
+id: dev.mcpg.watch.mqtt
+name: MQTT Watch Strategy
+license: Apache-2.0
+description: |
+  Subscribes to MQTT 3.1.1 topic filters (Mosquitto, EMQX, HiveMQ, AWS IoT
+  Core, any compliant broker) and makes each message an MCP Event. The
+  `mqtt_topics` strategy keeps a persistent session with manual
+  acknowledgement: a QoS 1 or 2 message is acknowledged to the broker once the
+  gateway has stored its event, and a message the gateway has not taken in
+  time makes the watch reconnect so the broker sends it again, so delivery is
+  at-least-once. `mqtts://` verifies the broker against public roots or a
+  given CA.
+class: watch_strategy
+runtime: native-cdylib-v1
+protocol_version: "1.0"
+required_capabilities: [network_outbound]
+# MCP Events: the broker's session keeps what is not acknowledged, so the
+# watch needs no stored position.
+watch_strategies:
+  - kind: mqtt_topics
+    placement: single_owner
+    resume: false
+    event_types:
+      - name: mqtt.message
+        description: One message on a subscribed topic filter. MQTT 3.1.1 messages carry no id, so a redelivered message is a new event.
+        payload_schema:
+          type: object
+          required: [topic, qos, retain, dup, payload, payloadEncoding]
+          properties:
+            topic: { type: string }
+            qos: { enum: [0, 1, 2] }
+            retain: { type: boolean, description: A retained message the broker sent at subscribe. }
+            dup: { type: boolean, description: The broker sent it again. }
+            payload:
+              description: The message payload, read as payloadEncoding says; null when payloadTruncated.
+            payloadEncoding:
+              description: How payload holds the message payload - its JSON, its UTF-8 text, or standard base64 of its bytes.
+              enum: [json, text, base64, null]
+            payloadTruncated: { type: boolean, description: The payload was larger than max_body_bytes and is left out. }
+            payloadSize: { type: integer, description: The size of a payload left out, in bytes. }
